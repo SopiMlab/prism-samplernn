@@ -8,20 +8,6 @@ import shutil
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
-# there are probably better ways to structure this package, but for now we try
-# to keep it such that upstream changes are easy to merge.
-
-class CustomBuildPy(build_py_command):
-    def run(self):
-        conf_dir = "./samplernn_scripts/conf"
-        conf_files = [fn for fn in os.listdir(".") if fn.endswith(".config.json")]
-
-        os.mkdir(conf_dir)
-        for fn in conf_files:
-            shutil.copy2(fn, os.path.join(conf_dir, fn))
-
-        build_py_command.run(self)
-
 setuptools.setup(
     name="prism-samplernn",
     version="0.1",
@@ -49,8 +35,5 @@ setuptools.setup(
             "conf/*.config.json"
         ]
     },
-    zip_safe=False,
-    cmdclass={
-        "build_py": CustomBuildPy
-    }
+    zip_safe=False
 )

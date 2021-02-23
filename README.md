@@ -213,7 +213,7 @@ To generate audio from a trained model use the generate.py script:
 python samplernn_scripts.generate \
   --output_path path/to/out.wav \
   --checkpoint_path ./logdir/default/26.07.2020_20.48.51/model.ckpt-100 \
-  --config_file ./default.config.json \
+  --config_file ./samplernn_scripts/conf/default.config.json \
   --num_seqs 10 \
   --dur 10 \
   --sample_rate 22050 \

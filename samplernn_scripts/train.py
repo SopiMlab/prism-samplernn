@@ -21,8 +21,8 @@ import librosa
 from natsort import natsorted
 
 from samplernn import SampleRNN
-from dataset import (get_dataset, get_dataset_filenames_split)
-from checkpoints import (TrainingStepCallback, ModelCheckpointCallback)
+from .dataset import (get_dataset, get_dataset_filenames_split)
+from .checkpoints import (TrainingStepCallback, ModelCheckpointCallback)
 
 
 # https://github.com/ibab/tensorflow-wavenet/issues/255

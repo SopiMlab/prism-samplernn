@@ -8,8 +8,8 @@ import argparse
 import librosa
 
 from samplernn import SampleRNN
-from dataset import (get_dataset, find_files, get_dataset_filenames_split)
-from train import optimizer_factory
+from .dataset import (get_dataset, find_files, get_dataset_filenames_split)
+from .train import optimizer_factory
 
 
 def get_arguments():

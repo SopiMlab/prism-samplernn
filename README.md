@@ -2,6 +2,8 @@
 
 [PRiSM](https://www.rncm.ac.uk/research/research-centres-rncm/prism/) implementation of [SampleRNN: An Unconditional End-to-End Neural Audio Generation Model](https://arxiv.org/abs/1612.07837), for [TensorFlow 2](https://www.tensorflow.org/overview).
 
+This fork by SOPI mainly serves to turn the code into an installable Python package.
+
 -----------
 
 ### Table of Contents
@@ -68,9 +70,9 @@ We're naming the environment after the repository, but you can choose whatever n
 
 `conda activate prism-samplernn`
 
-Finally run requirements.txt to install the dependencies:
+Finally install the package:
 
-`pip install -r requirements.txt`
+`pip install .`
 
 -----------
 
@@ -87,7 +89,7 @@ The architecture of the network conforms to the three-tier design proposed in th
 SampleRNN is designed to accept raw audio in the form of .wav files. We therefore need to preprocess our source .wav file by slicing it into chunks, using the supplied [chunk_audio.py](https://github.com/rncm-prism/prism-samplernn/blob/master/chunk_audio.py) script:
 
 ```shell
-python chunk_audio.py \
+python -m samplernn_scripts.chunk_audio \
   --input_file path/to/input.wav \
   --output_dir ./chunks \
   --chunk_length 8000 \
@@ -101,7 +103,7 @@ The `--output_dir` argument specifies the path to the directory to contain the c
 Assuming your training corpus is stored in a directory named `data` under the present directory, you can run the train.py script as follows:
 
 ```shell
-python train.py \
+python -m samplernn_scripts.train \
   --id test \
   --data_dir ./data \
   --num_epochs 100 \
@@ -187,7 +189,7 @@ The variables which control the training process are known as _hyperparameters_.
 The `tune.py` script is very similar to `train.py`, except that instead of taking just a single value for each hyperparameter it takes a list of values, defining the search space for that hyperparameter. No separate JSON configuration file is required for the model, all hyperparameters being passed through the command line arguments. To run the tuning script, execute:
 
 ```shell
-python tune.py \
+python -m samplernn_scripts.tune \
   --data_dir path/to/dataset \
   --num_epochs 20 \
   --big_frame_size 32 64 \
@@ -208,7 +210,7 @@ For more information on Keras Tuner see its [documentation pages](https://keras-
 To generate audio from a trained model use the generate.py script:
 
 ```shell
-python generate.py \
+python samplernn_scripts.generate \
   --output_path path/to/out.wav \
   --checkpoint_path ./logdir/default/26.07.2020_20.48.51/model.ckpt-100 \
   --config_file ./default.config.json \

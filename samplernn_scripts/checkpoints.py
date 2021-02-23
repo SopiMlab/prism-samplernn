@@ -4,7 +4,7 @@ import time
 import tensorflow as tf
 from tensorflow.python.lib.io import file_io
 
-from generate import generate
+from .generate import generate
 
 
 ERASE_LINE = '\x1b[2K'

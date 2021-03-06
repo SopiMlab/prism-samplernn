@@ -193,16 +193,30 @@ def generate(path, ckpt_path, config, num_seqs=NUM_SEQS, dur=OUTPUT_DUR, sample_
     samples.append(init_samples)
     print_progress_every = NUM_FRAMES_TO_PRINT * model.big_frame_size
     start_time = time.time()
+    stats = [0.0] * 10
     for i in range(0, num_samps // model.big_frame_size):
         t = i * model.big_frame_size
         # Generate samples
+        gen_start_time = time.time()
         frame_samples = model(samples[i], training=False, temperature=temperature)
+        gen_end_time = time.time()
         samples.append(frame_samples)
+        del stats[0]
+        stats.append(gen_end_time - gen_start_time)
         # Monitor progress
         if t % print_progress_every == 0:
             end = min(t + print_progress_every, num_samps)
             step_dur = time.time() - start_time
-            print(f'Generated samples {t+1} - {end} of {num_samps} (time elapsed: {step_dur:.3f} seconds)')
+            stats_num = min(i+1, len(stats)) * model.big_frame_size
+            stats_dur = sum(stats)
+            time_rem = 0
+            if stats_dur > 0:
+                rate = stats_num / stats_dur
+                num_rem = num_samps - t
+                time_rem = int(round(num_rem / rate))
+            hours_rem, time_rem = divmod(time_rem, 3600)
+            mins_rem, secs_rem = divmod(time_rem, 60)
+            print(f'Generated samples {t+1} - {end} of {num_samps} (time elapsed: {step_dur:.3f} seconds, remaining: {hours_rem}h {mins_rem}m {secs_rem}s)')
     samples = tf.concat(samples, axis=1)
     samples = samples[:, model.big_frame_size:, :]
     # Save sequences to disk

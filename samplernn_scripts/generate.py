@@ -1,6 +1,7 @@
 from __future__ import print_function
 import argparse
 import os
+import re
 import sys
 import time
 import json
@@ -231,12 +232,26 @@ def generate(path, ckpt_path, config, num_seqs=NUM_SEQS, dur=OUTPUT_DUR, sample_
     print('Done')
 
 
-def main():
-    args = get_arguments()
+def find_checkpoint_path(args):
+    if os.path.isdir(args.checkpoint_path):
+        max_ckpt = None
+        for fn in os.listdir(args.checkpoint_path):
+            m = re.match(r'^(model\.ckpt-(\d+))\.index$', fn)
+            if m:
+                num = int(m.group(2))
+                if max_ckpt == None or max_ckpt[1] < num:
+                    max_ckpt = (m.group(1), num)
+        if max_ckpt == None:
+            print('no model.ckpt-#.index files found in checkpoint dir')
+            sys.exit(1)
+        return os.path.join(args.checkpoint_path, max_ckpt[0])
+    else:
+        return args.checkpoint_path
+
+def find_config(ckpt_path, config_path):
     config = None
-    config_path = args.config_file
     if config_path == None:
-        ckpt_dir = os.path.dirname(args.checkpoint_path)
+        ckpt_dir = os.path.dirname(ckpt_path)
         is_config = lambda fn: not fn.startswith('.') and fn.endswith('.config.json')
         ckpt_configs = [fn for fn in os.listdir(ckpt_dir) if is_config(fn)]
         num_ckpt_configs = len(ckpt_configs)
@@ -250,11 +265,18 @@ def main():
         print(f'config: {config_path}')
     if config_path != None:
         with open(config_path, 'r') as config_file:
-            config = json.load(config_file)
+            return json.load(config_file)
     else:
         print('config: default')
-        config = json.loads(pkgutil.get_data('samplernn_scripts', 'conf/default.config.json'))
-    generate(args.output_path, args.checkpoint_path, config, args.num_seqs, args.dur,
+        return json.loads(pkgutil.get_data('samplernn_scripts', 'conf/default.config.json'))
+
+    
+def main():
+    args = get_arguments()
+    checkpoint_path = find_checkpoint_path(args)
+    print(f'checkpoint: {checkpoint_path}')
+    config = find_config(checkpoint_path, args.config_file)
+    generate(args.output_path, checkpoint_path, config, args.num_seqs, args.dur,
              args.sample_rate, args.temperature, args.seed, args.seed_offset)
 
 

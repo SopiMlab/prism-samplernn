@@ -31,7 +31,7 @@ def get_arguments():
                                                         help='Path to the generated .wav file')
     parser.add_argument('--checkpoint_path',            type=str,            required=True,
                                                         help='Path to a saved checkpoint for the model')
-    parser.add_argument('--config_file',                type=str,            required=True,
+    parser.add_argument('--config_file',                type=str,            default=None,
                                                         help='Path to the JSON config for the model')
     parser.add_argument('--dur',                        type=check_positive, default=OUTPUT_DUR,
                                                         help='Duration of generated audio')
@@ -233,8 +233,27 @@ def generate(path, ckpt_path, config, num_seqs=NUM_SEQS, dur=OUTPUT_DUR, sample_
 
 def main():
     args = get_arguments()
-    with open(args.config_file, 'r') as config_file:
-        config = json.load(config_file)
+    config = None
+    config_path = args.config_file
+    if config_path == None:
+        ckpt_dir = os.path.dirname(args.checkpoint_path)
+        is_config = lambda fn: not fn.startswith('.') and fn.endswith('.config.json')
+        ckpt_configs = [fn for fn in os.listdir(ckpt_dir) if is_config(fn)]
+        num_ckpt_configs = len(ckpt_configs)
+        if num_ckpt_configs > 1:
+            print(f'error: checkpoint directory contains multiple configs: {ckpt_configs}')
+            sys.exit(1)
+        elif num_ckpt_configs == 1:
+            print(f'config: {ckpt_configs[0]} (from checkpoint directory)')
+            config_path = os.path.join(ckpt_dir, ckpt_configs[0])
+    else:
+        print(f'config: {config_path}')
+    if config_path != None:
+        with open(config_path, 'r') as config_file:
+            config = json.load(config_file)
+    else:
+        print('config: default')
+        config = json.loads(pkgutil.get_data('samplernn_scripts', 'conf/default.config.json'))
     generate(args.output_path, args.checkpoint_path, config, args.num_seqs, args.dur,
              args.sample_rate, args.temperature, args.seed, args.seed_offset)
 

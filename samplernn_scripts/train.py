@@ -122,6 +122,12 @@ def get_arguments():
                                                         help='Starting offset of the seed audio')
     parser.add_argument('--num_val_batches',            type=check_positive, default=NUM_VAL_BATCHES,
                                                         help='Number of batches to reserve for validation')
+    parser.add_argument('--mono',                       dest='mono', action='store_true',
+                                                        help='Mix multichannel audio to mono')
+    parser.add_argument('--no-mono',                    dest='mono', action='store_false',
+                                                        help='Split multichannel audio into separate chunks')
+    parser.set_defaults(mono=False)
+    
     return parser.parse_args()
 
 # Optimizer factory adapted from WaveNet
@@ -251,7 +257,9 @@ def main():
                               drop_remainder=True, q_type=q_type, q_levels=q_levels)
 
     # This computes subseqs per batch...
-    samples0, _ = librosa.load(train_split[0], sr=None, mono=True)
+    samples0, _ = librosa.load(train_split[0], sr=args.sample_rate, mono=args.mono)
+    if not args.mono:
+        samples0 = samples0.reshape(-1)
     steps_per_batch = int(np.floor(len(samples0) / float(seq_len)))
 
     steps_per_epoch = len(train_split) // args.batch_size * steps_per_batch

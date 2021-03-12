@@ -1,5 +1,6 @@
 from __future__ import print_function
 import argparse
+import math
 import os
 import re
 import sys
@@ -19,7 +20,6 @@ NUM_SEQS = 1
 SAMPLING_TEMPERATURE = 0.75
 SEED_OFFSET = 0
 
-
 def get_arguments():
     def check_positive(value):
         val = int(value)
@@ -27,6 +27,17 @@ def get_arguments():
              raise argparse.ArgumentTypeError("%s is not positive" % value)
         return val
 
+    def check_env(value):
+        m = re.match(r"^Env\(\[(.*?)\], *\[(.*?)\], *\[(.*?)\]\)$", value)
+        if m == None:
+            return None
+            
+        levels, times, curve = map(lambda x: list(map(float, re.split(r", *", x))), m.groups())
+        return Env(levels, times, curve)
+    
+    def check_temperature(value):            
+        return check_env(value) or float(value)
+    
     parser = argparse.ArgumentParser(description='PRiSM TensorFlow SampleRNN Generator')
     parser.add_argument('--output_path',                type=str,            required=True,
                                                         help='Path to the generated .wav file')
@@ -40,7 +51,8 @@ def get_arguments():
                                                         help='Number of audio sequences to generate')
     parser.add_argument('--sample_rate',                type=check_positive, default=SAMPLE_RATE,
                                                         help='Sample rate of the generated audio')
-    parser.add_argument('--temperature',                type=float,          default=SAMPLING_TEMPERATURE, nargs='+',
+    parser.add_argument('--temperature',                type=check_temperature,
+                                                        default=SAMPLING_TEMPERATURE, nargs='+',
                                                         help='Sampling temperature')
     parser.add_argument('--seed',                       type=str,            help='Path to audio for seeding')
     parser.add_argument('--seed_offset',                type=int,            default=SEED_OFFSET,
@@ -163,16 +175,78 @@ def load_seed_audio(path, offset, length):
 
 NUM_FRAMES_TO_PRINT = 4
 
-def get_temperature(temperature, batch_size):
+def lincurve(x, l0, r0, l1, r1, curve):
+    if abs(curve) < 0.001:
+        return (x - l0) / (r0 - l0) * (r1 - l1) + l1
+    grow = math.exp(curve)
+    a = (r1 - l1) / (1.0 - grow)
+    b = l1 + a
+    scaled = (x - l0) / (r0 - l0)
+    return b - a * pow(grow, scaled)
+
+class Env:
+    def __init__(self, levels=[0,1,0], times=[1,1], curves=[0]):
+        self.levels = levels
+        self.times = times
+        self.curves = curves
+        
+    def value(self, t):
+        if t < 0.0:
+            return self.levels[0]
+        i = 0
+        t0 = 0.0
+        t1 = 0.0
+        for i in range(len(self.levels)):
+            t1 = t0 + self.times[i] if i < len(self.times) else None
+            if t1 == None or t < t1:
+                break
+            t0 = t1
+        v0 = self.levels[i]
+        if i == len(self.levels)-1:
+            return v0
+        v1 = self.levels[i+1]
+        k = (t-t0)/(t1-t0)
+        k = lincurve(k, 0.0, 1.0, 0.0, 1.0, self.curves[i])
+        v = (1.0-k)*v0 + k*v1
+        return v
+    
+    def duration(self):
+        return sum(self.times)
+    
+    def discretize(self, n, dur=None):
+        if dur == None:
+            dur = self.duration()
+        sig = [self.value(i/n*dur) for i in range(n)]
+        return sig
+    
+    def __repr__(self):
+        return f"Env({self.levels}, {self.times}, {self.curves})"
+
+def get_temperature(temperature, batch_size, num_samps, dur):
+    # get_temperature()
+    #  temperature=[0.96, 1.0]
+    #  batch_size=2
+    #  temp=[[0.95999998]
+    #  [1.        ]]
+    # -> shape = (batch_size, 1)
+    print("get_temperature()")
+    print(f" temperature={temperature}")
+    print(f" batch_size={batch_size}")
     if isinstance(temperature, list):
+        have_envs = any(isinstance(temp, Env) for temp in temperature)
+        # TODO: handle mixed temperature types
+        if have_envs:
+            temperature = [env.discretize(num_samps, dur) for env in temperature]
         if len(temperature) < batch_size:
             last_val = temperature[len(temperature)-1]
             while len(temperature) < batch_size:
                 temperature = temperature + [last_val]
         elif len(temperature) > batch_size:
             temperature = temperature[:batch_size]
-        temperature = tf.reshape(temperature, (batch_size, 1))
-    return tf.cast(temperature, tf.float64)
+        temperature = tf.reshape(temperature, (batch_size, -1))
+    temp = tf.cast(temperature, tf.float64)
+    print(f" temp={temp}")
+    return temp
 
 def generate(path, ckpt_path, config, num_seqs=NUM_SEQS, dur=OUTPUT_DUR, sample_rate=SAMPLE_RATE,
              temperature=SAMPLING_TEMPERATURE, seed=None, seed_offset=None):
@@ -181,7 +255,11 @@ def generate(path, ckpt_path, config, num_seqs=NUM_SEQS, dur=OUTPUT_DUR, sample_
     q_levels = model.q_levels
     q_zero = q_levels // 2
     num_samps = dur * sample_rate
-    temperature = get_temperature(temperature, num_seqs)
+    # print("generate()")
+    # print(f" num_samps={num_samps}") # 128000
+    # print(f" temperature={temperature}")
+    temperature = get_temperature(temperature, num_seqs, num_samps, dur)
+    # print(f" temperature'.shape={temperature.shape}")
     # Precompute sample sequences, initialised to q_zero.
     samples = []
     init_samples = np.full((model.batch_size, model.big_frame_size, 1), q_zero)
@@ -192,16 +270,26 @@ def generate(path, ckpt_path, config, num_seqs=NUM_SEQS, dur=OUTPUT_DUR, sample_
         init_samples[:, :model.big_frame_size, :] = quantize(seed_audio, q_type, q_levels)
     init_samples = tf.constant(init_samples, dtype=tf.int32)
     samples.append(init_samples)
+    # print(f" len(samples)={len(samples)}")
+    # print(f" samples[0].shape={samples[0].shape}") # (1,64,1)
     print_progress_every = NUM_FRAMES_TO_PRINT * model.big_frame_size
     start_time = time.time()
     stats = [0.0] * 10
     for i in range(0, num_samps // model.big_frame_size):
         t = i * model.big_frame_size
         # Generate samples
+        temp = temperature
+        if temp.shape[-1] > 1:
+            start = i * model.big_frame_size
+            stop = (i+1) * model.big_frame_size
+            temp = temperature[:, start:stop]
+        # print(f" temp.shape={temp.shape}")
         gen_start_time = time.time()
-        frame_samples = model(samples[i], training=False, temperature=temperature)
+        frame_samples = model(samples[i], training=False, temperature=temp)
+        # print(f" frame_samples.shape={frame_samples.shape}")
         gen_end_time = time.time()
         samples.append(frame_samples)
+        # print(f" len(samples')={len(samples)}")
         del stats[0]
         stats.append(gen_end_time - gen_start_time)
         # Monitor progress

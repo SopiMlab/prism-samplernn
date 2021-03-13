@@ -232,20 +232,22 @@ def get_temperature(temperature, batch_size, num_samps, dur):
     print("get_temperature()")
     print(f" temperature={temperature}")
     print(f" batch_size={batch_size}")
-    if isinstance(temperature, list):
-        have_envs = any(isinstance(temp, Env) for temp in temperature)
-        # TODO: handle mixed temperature types
-        if have_envs:
-            temperature = [env.discretize(num_samps, dur) for env in temperature]
-        if len(temperature) < batch_size:
-            last_val = temperature[len(temperature)-1]
-            while len(temperature) < batch_size:
-                temperature = temperature + [last_val]
-        elif len(temperature) > batch_size:
-            temperature = temperature[:batch_size]
-        temperature = tf.reshape(temperature, (batch_size, -1))
+    if not isinstance(temperature, list):
+        temperature = [temperature]
+    have_envs = any(isinstance(temp, Env) for temp in temperature)
+    # TODO: handle mixed temperature types
+    if have_envs:
+        temperature = [env.discretize(num_samps, dur) for env in temperature]
+    if len(temperature) < batch_size:
+        last_val = temperature[len(temperature)-1]
+        while len(temperature) < batch_size:
+            temperature = temperature + [last_val]
+    elif len(temperature) > batch_size:
+        temperature = temperature[:batch_size]
+    temperature = tf.reshape(temperature, (batch_size, -1))
     temp = tf.cast(temperature, tf.float64)
     print(f" temp={temp}")
+    assert len(temp.shape) > 0, "temp is empty"
     return temp
 
 def generate(path, ckpt_path, config, num_seqs=NUM_SEQS, dur=OUTPUT_DUR, sample_rate=SAMPLE_RATE,

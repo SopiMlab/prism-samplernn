@@ -135,7 +135,10 @@ class SampleRNN(tf.keras.Model):
             # Generate
             sample_outputs = tf.reshape(sample_outputs, [-1, self.q_levels])
             # print(f" sample_outputs'.shape={sample_outputs.shape}") # (1,256)
-            generated = self.sample(sample_outputs, temperature[:, i:i+1])
+            temp = temperature
+            if temp.shape[-1] > 1:
+                temp = temp[:, i:i+1]
+            generated = self.sample(sample_outputs, temp)
             # print(f" generated.shape={generated.shape}")
             generated = tf.reshape(generated, [self.batch_size, 1, 1])
             # print(f" generated'.shape={generated.shape}")

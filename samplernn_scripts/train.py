@@ -224,8 +224,8 @@ def main():
     # Load model configuration
     with open(args.config_file, 'r') as config_file:
         config = json.load(config_file)
-    # Save configuration in output dir
-    with open(os.path.join(generate_dir, os.path.basename(args.config_file)), "w") as config_file:
+    # Save configuration in logdir
+    with open(os.path.join(logdir, os.path.basename(args.config_file)), "w") as config_file:
         json.dump(config, config_file)
     # Create the model
     model = create_model(args.batch_size, config)

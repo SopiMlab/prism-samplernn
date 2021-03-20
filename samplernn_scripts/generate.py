@@ -1,5 +1,6 @@
 from __future__ import print_function
 import argparse
+from functools import reduce
 import math
 import os
 import pkgutil
@@ -254,8 +255,17 @@ def get_temperature(temperature, batch_size, num_samps, dur):
     assert len(temp.shape) > 0, "temp is empty"
     return temp
 
-def generate(output_dir, output_path, ckpt_path, config, num_seqs=NUM_SEQS, dur=OUTPUT_DUR, sample_rate=SAMPLE_RATE,
-             temperature=SAMPLING_TEMPERATURE, seed=None, seed_offset=None, raw_args=[]):
+def format_dur(dur, subdivs=((1,"s"), (60,"m"), (60,"h"), (24,"d"))):
+    lens, units = list(zip(*subdivs))
+    nums = reduce(lambda a, b: (a[0]//b, [a[0]%b] + a[1]), lens, (dur, []))
+    nums = list(zip(nums[1][-2::-1] + [nums[0]], units))[::-1]
+    while len(nums) > 1 and nums[0][0] == 0:
+        nums.pop(0)
+    return " ".join(f"{num}{unit}" for num, unit in nums)
+
+def generate(output_dir, output_path, ckpt_path, config, num_seqs=NUM_SEQS,
+             dur=OUTPUT_DUR, sample_rate=SAMPLE_RATE, temperature=SAMPLING_TEMPERATURE,
+             seed=None, seed_offset=None, raw_args=[]):
     model = create_inference_model(ckpt_path, num_seqs, config)
     q_type = model.q_type
     q_levels = model.q_levels
@@ -324,9 +334,8 @@ def generate(output_dir, output_path, ckpt_path, config, num_seqs=NUM_SEQS, dur=
                 rate = stats_num / stats_dur
                 num_rem = num_samps - t
                 time_rem = int(round(num_rem / rate))
-            hours_rem, time_rem = divmod(time_rem, 3600)
-            mins_rem, secs_rem = divmod(time_rem, 60)
-            print(f'Generated samples {t+1} - {end} of {num_samps} (time elapsed: {step_dur:.3f} seconds, remaining: {hours_rem}h {mins_rem}m {secs_rem}s)')
+            remaining = format_dur(time_rem)
+            print(f'Generated samples {t+1} - {end} of {num_samps} (time elapsed: {step_dur:.3f} seconds, remaining: {remaining})')
     samples = tf.concat(samples, axis=1)
     samples = samples[:, model.big_frame_size:, :]
     # Save sequences to disk

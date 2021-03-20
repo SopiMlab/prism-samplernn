@@ -4,6 +4,7 @@ import math
 import os
 import pkgutil
 import re
+import shlex
 import sys
 import time
 import json
@@ -40,7 +41,9 @@ def get_arguments():
         return check_env(value) or float(value)
     
     parser = argparse.ArgumentParser(description='PRiSM TensorFlow SampleRNN Generator')
-    parser.add_argument('--output_path',                type=str,            required=True,
+    parser.add_argument('--output_dir',                 type=str,            default=".",
+                                                        help='Path to the generated .wav file')
+    parser.add_argument('--output_path',                type=str,            default=None,
                                                         help='Path to the generated .wav file')
     parser.add_argument('--checkpoint_path',            type=str,            required=True,
                                                         help='Path to a saved checkpoint for the model')
@@ -251,8 +254,8 @@ def get_temperature(temperature, batch_size, num_samps, dur):
     assert len(temp.shape) > 0, "temp is empty"
     return temp
 
-def generate(path, ckpt_path, config, num_seqs=NUM_SEQS, dur=OUTPUT_DUR, sample_rate=SAMPLE_RATE,
-             temperature=SAMPLING_TEMPERATURE, seed=None, seed_offset=None):
+def generate(output_dir, output_path, ckpt_path, config, num_seqs=NUM_SEQS, dur=OUTPUT_DUR, sample_rate=SAMPLE_RATE,
+             temperature=SAMPLING_TEMPERATURE, seed=None, seed_offset=None, raw_args=[]):
     model = create_inference_model(ckpt_path, num_seqs, config)
     q_type = model.q_type
     q_levels = model.q_levels
@@ -263,6 +266,21 @@ def generate(path, ckpt_path, config, num_seqs=NUM_SEQS, dur=OUTPUT_DUR, sample_
     # print(f" temperature={temperature}")
     temperature = get_temperature(temperature, num_seqs, num_samps, dur)
     # print(f" temperature'.shape={temperature.shape}")
+    # Save args to disk
+    if output_path != None:
+        path = output_path
+        name = os.path.splitext(os.path.basename(output_path))[0]
+        args_path = os.path.join(os.path.dirname(output_path), f"{name}_args.txt")
+    else:
+        try:
+            os.makedirs(output_dir)
+        except FileExistsError:
+            pass
+        path = os.path.join(output_dir, f"generated.wav")
+        args_path = os.path.join(output_dir, "args.txt")
+    with open(args_path, "w") as fp:
+        args_str = " ".join(shlex.quote(arg) for arg in raw_args)
+        fp.write(args_str)
     # Precompute sample sequences, initialised to q_zero.
     samples = []
     init_samples = np.full((model.batch_size, model.big_frame_size, 1), q_zero)
@@ -367,8 +385,8 @@ def main():
     checkpoint_path = find_checkpoint_path(args)
     print(f'checkpoint: {checkpoint_path}')
     config = find_config(checkpoint_path, args.config_file)
-    generate(args.output_path, checkpoint_path, config, args.num_seqs, args.dur,
-             args.sample_rate, args.temperature, args.seed, args.seed_offset)
+    generate(args.output_dir, args.output_path, checkpoint_path, config, args.num_seqs, args.dur,
+             args.sample_rate, args.temperature, args.seed, args.seed_offset, sys.argv[1:])
 
 
 if __name__ == '__main__':

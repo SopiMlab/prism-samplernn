@@ -350,10 +350,10 @@ def generate(output_dir, output_path, ckpt_path, config, num_seqs=NUM_SEQS,
     print('Done')
 
 
-def find_checkpoint_path(args):
-    if os.path.isdir(args.checkpoint_path):
+def find_checkpoint_path(checkpoint_path):
+    if os.path.isdir(checkpoint_path):
         max_ckpt = None
-        for fn in os.listdir(args.checkpoint_path):
+        for fn in os.listdir(checkpoint_path):
             m = re.match(r'^(model\.ckpt-(\d+))\.index$', fn)
             if m:
                 num = int(m.group(2))
@@ -362,9 +362,9 @@ def find_checkpoint_path(args):
         if max_ckpt == None:
             print('no model.ckpt-#.index files found in checkpoint dir')
             sys.exit(1)
-        return os.path.join(args.checkpoint_path, max_ckpt[0])
+        return os.path.join(checkpoint_path, max_ckpt[0])
     else:
-        return args.checkpoint_path
+        return checkpoint_path
 
 def find_config(ckpt_path, config_path):
     config = None
@@ -391,7 +391,7 @@ def find_config(ckpt_path, config_path):
     
 def main():
     args = get_arguments()
-    checkpoint_path = find_checkpoint_path(args)
+    checkpoint_path = find_checkpoint_path(args.checkpoint_path)
     print(f'checkpoint: {checkpoint_path}')
     config = find_config(checkpoint_path, args.config_file)
     generate(args.output_dir, args.output_path, checkpoint_path, config, args.num_seqs, args.dur,

@@ -1,6 +1,8 @@
 from __future__ import print_function
 import argparse
 import os
+import shlex
+import sys
 import time
 from datetime import datetime
 import json
@@ -202,6 +204,7 @@ def get_initial_epoch(ckpt_path):
     return epoch
 
 def main():
+    raw_args = sys.argv[1:]
     args = get_arguments()
 
     train_split, val_split = get_dataset_filenames_split(
@@ -215,17 +218,22 @@ def main():
     if not os.path.exists(generate_dir):
         os.makedirs(generate_dir)
     # Time-stamped directory for the current run, which will be used to store
-    # checkpoints and summary files. We don't need to explicitly create it as we
-    # pass the name to the TensorBoard callback, which creates it for us.
+    # checkpoints and summary files.
     rundir = '{}/{}'.format(logdir, datetime.now().strftime('%d.%m.%Y_%H.%M.%S'))
-
+    # Create the rundir
+    os.makedirs(rundir)
+    
     latest_checkpoint = get_latest_checkpoint(logdir)
 
     # Load model configuration
     with open(args.config_file, 'r') as config_file:
         config = json.load(config_file)
-    # Save configuration in logdir
-    with open(os.path.join(logdir, os.path.basename(args.config_file)), "w") as config_file:
+    # Save args in rundir
+    with open(os.path.join(rundir, "args.txt"), "w") as args_file:
+        args_str = " ".join(map(shlex.quote, raw_args))
+        args_file.write(args_str)
+    # Save configuration in rundir
+    with open(os.path.join(rundir, os.path.basename(args.config_file)), "w") as config_file:
         json.dump(config, config_file)
     # Create the model
     model = create_model(args.batch_size, config)

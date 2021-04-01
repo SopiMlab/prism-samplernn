@@ -289,7 +289,7 @@ def generate(output_dir, output_path, ckpt_path, config, num_seqs=NUM_SEQS,
         path = os.path.join(output_dir, f"generated.wav")
         args_path = os.path.join(output_dir, "args.txt")
     with open(args_path, "w") as fp:
-        args_str = " ".join(shlex.quote(arg) for arg in raw_args)
+        args_str = " ".join(map(shlex.quote, raw_args))
         fp.write(args_str)
     # Precompute sample sequences, initialised to q_zero.
     samples = []

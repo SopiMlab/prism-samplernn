@@ -105,7 +105,7 @@ class ModelCheckpointCallback(tf.keras.callbacks.ModelCheckpoint):
     def _generate(self, ckpt_path, args):
         print('Generating samples for epoch {}...'.format(self.epoch))
         output_path = '{}/{}_epoch_{}.wav'.format(args['generate_dir'], args['id'], self.epoch)
-        generate(output_path, ckpt_path, args['config'], args['num_seqs'], args['dur'], args['sample_rate'],
+        generate(".", output_path, ckpt_path, args['config'], args['num_seqs'], args['dur'], args['sample_rate'],
                  args['temperature'], args['seed'], args['seed_offset'])
 
     def _delete_file_if_exists(self, filespec):

@@ -23,23 +23,23 @@ NUM_SEQS = 1
 SAMPLING_TEMPERATURE = 0.75
 SEED_OFFSET = 0
 
+def check_env(value):
+    m = re.match(r"^Env\(\[(.*?)\], *\[(.*?)\], *\[(.*?)\]\)$", value)
+    if m == None:
+        return None
+    
+    levels, times, curve = map(lambda x: list(map(float, re.split(r", *", x))), m.groups())
+    return Env(levels, times, curve)
+
+def check_temperature(value):
+    return check_env(value) or float(value)
+
 def get_arguments():
     def check_positive(value):
         val = int(value)
         if val < 1:
              raise argparse.ArgumentTypeError("%s is not positive" % value)
         return val
-
-    def check_env(value):
-        m = re.match(r"^Env\(\[(.*?)\], *\[(.*?)\], *\[(.*?)\]\)$", value)
-        if m == None:
-            return None
-            
-        levels, times, curve = map(lambda x: list(map(float, re.split(r", *", x))), m.groups())
-        return Env(levels, times, curve)
-    
-    def check_temperature(value):            
-        return check_env(value) or float(value)
     
     parser = argparse.ArgumentParser(description='PRiSM TensorFlow SampleRNN Generator')
     parser.add_argument('--output_dir',                 type=str,            default=".",
@@ -263,20 +263,7 @@ def format_dur(dur, subdivs=((1,"s"), (60,"m"), (60,"h"), (24,"d"))):
         nums.pop(0)
     return " ".join(f"{num}{unit}" for num, unit in nums)
 
-def generate(output_dir, output_path, ckpt_path, config, num_seqs=NUM_SEQS,
-             dur=OUTPUT_DUR, sample_rate=SAMPLE_RATE, temperature=SAMPLING_TEMPERATURE,
-             seed=None, seed_offset=None, raw_args=[]):
-    model = create_inference_model(ckpt_path, num_seqs, config)
-    q_type = model.q_type
-    q_levels = model.q_levels
-    q_zero = q_levels // 2
-    num_samps = dur * sample_rate
-    # print("generate()")
-    # print(f" num_samps={num_samps}") # 128000
-    # print(f" temperature={temperature}")
-    temperature = get_temperature(temperature, num_seqs, num_samps, dur)
-    # print(f" temperature'.shape={temperature.shape}")
-    # Save args to disk
+def get_paths(output_dir, output_path):
     if output_path != None:
         path = output_path
         name = os.path.splitext(os.path.basename(output_path))[0]
@@ -288,15 +275,31 @@ def generate(output_dir, output_path, ckpt_path, config, num_seqs=NUM_SEQS,
             pass
         path = os.path.join(output_dir, f"generated.wav")
         args_path = os.path.join(output_dir, "args.txt")
-    with open(args_path, "w") as fp:
+    return path, args_path
+
+def save_args(raw_args, path):
+    with open(path, "w") as fp:
         args_str = " ".join(map(shlex.quote, raw_args))
         fp.write(args_str)
+
+def generate(model, num_seqs=NUM_SEQS,
+             dur=OUTPUT_DUR, sample_rate=SAMPLE_RATE, temperature=SAMPLING_TEMPERATURE,
+             seed=None, seed_offset=None):
+    q_type = model.q_type
+    q_levels = model.q_levels
+    q_zero = q_levels // 2
+    num_samps = dur * sample_rate
+    # print("generate()")
+    # print(f" num_samps={num_samps}") # 128000
+    # print(f" temperature={temperature}")
+    temperature = get_temperature(temperature, num_seqs, num_samps, dur)
+    # print(f" temperature'.shape={temperature.shape}")
     # Precompute sample sequences, initialised to q_zero.
     samples = []
     init_samples = np.full((model.batch_size, model.big_frame_size, 1), q_zero)
     # Set seed if provided.
-    if seed is not None:
-        seed_audio = load_seed_audio(seed, seed_offset, model.big_frame_size)
+    if seed:
+        seed_audio = seed
         seed_audio = tf.convert_to_tensor(seed_audio)
         init_samples[:, :model.big_frame_size, :] = quantize(seed_audio, q_type, q_levels)
     init_samples = tf.constant(init_samples, dtype=tf.int32)
@@ -339,16 +342,27 @@ def generate(output_dir, output_path, ckpt_path, config, num_seqs=NUM_SEQS,
     samples = tf.concat(samples, axis=1)
     samples = samples[:, model.big_frame_size:, :]
     # Save sequences to disk
-    path = path.split('.wav')[0]
     for i in range(model.batch_size):
         seq = np.reshape(samples[i], (-1, 1))[model.big_frame_size :].tolist()
         audio = dequantize(seq, q_type, q_levels)
+        yield audio.numpy()
+    print('Done')
+
+def generate_and_save(output_dir, output_path, ckpt_path, config, num_seqs=NUM_SEQS,
+                      dur=OUTPUT_DUR, sample_rate=SAMPLE_RATE, temperature=SAMPLING_TEMPERATURE,
+                      seed=None, seed_offset=None, raw_args=[]):
+    path, args_path = get_paths(output_dir, output_path)
+    model = create_inference_model(ckpt_path, num_seqs, config)
+    if seed != None:
+        seed = load_seed_audio(seed, seed_offset, model.big_frame_size)
+    save_args(raw_args, args_path)
+    audios = generate(model, num_seqs, dur, sample_rate, temperature, seed, seed_offset)
+    path = path.split('.wav')[0]
+    for i, audio in enumerate(audios):
         file_name = '{}_{}'.format(path, str(i)) if model.batch_size > 1 else path
         file_name = '{}.wav'.format(file_name)
         write_wav(file_name, audio, sample_rate)
         print('Generated sample output to {}'.format(file_name))
-    print('Done')
-
 
 def find_checkpoint_path(checkpoint_path):
     if os.path.isdir(checkpoint_path):
@@ -391,11 +405,13 @@ def find_config(ckpt_path, config_path):
     
 def main():
     args = get_arguments()
+    raw_args = sys.argv[1:]
     checkpoint_path = find_checkpoint_path(args.checkpoint_path)
     print(f'checkpoint: {checkpoint_path}')
     config = find_config(checkpoint_path, args.config_file)
-    generate(args.output_dir, args.output_path, checkpoint_path, config, args.num_seqs, args.dur,
-             args.sample_rate, args.temperature, args.seed, args.seed_offset, sys.argv[1:])
+    generate_and_save(args.output_dir, args.output_path, checkpoint_path, config,
+                      args.num_seqs, args.dur, args.sample_rate, args.temperature, args.seed,
+                      args.seed_offset, raw_args)
 
 
 if __name__ == '__main__':

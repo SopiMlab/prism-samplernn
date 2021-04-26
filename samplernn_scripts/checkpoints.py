@@ -4,7 +4,7 @@ import time
 import tensorflow as tf
 from tensorflow.python.lib.io import file_io
 
-from .generate import generate
+from .generate import generate_and_save
 
 
 ERASE_LINE = '\x1b[2K'
@@ -105,8 +105,8 @@ class ModelCheckpointCallback(tf.keras.callbacks.ModelCheckpoint):
     def _generate(self, ckpt_path, args):
         print('Generating samples for epoch {}...'.format(self.epoch))
         output_path = '{}/{}_epoch_{}.wav'.format(args['generate_dir'], args['id'], self.epoch)
-        generate(".", output_path, ckpt_path, args['config'], args['num_seqs'], args['dur'], args['sample_rate'],
-                 args['temperature'], args['seed'], args['seed_offset'])
+        generate_and_save(".", output_path, ckpt_path, args['config'], args['num_seqs'], args['dur'],
+                          args['sample_rate'], args['temperature'], args['seed'], args['seed_offset'])
 
     def _delete_file_if_exists(self, filespec):
         """Deletes files matching `filespec`."""
